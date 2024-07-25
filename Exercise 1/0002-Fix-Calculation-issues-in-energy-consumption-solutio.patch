@@ -1,0 +1,78 @@
+From 25964c67dd01ab3091e1ff35641828a410880437 Mon Sep 17 00:00:00 2001
+From: Apple <apple@Apples-MacBook-Pro.local>
+Date: Sat, 1 Jun 2024 10:44:34 +0200
+Subject: [PATCH 2/2] Fix: Calculation issues in energy consumption solution
+ implementation
+
+---
+ src/app/components/measurement.ts |  8 +++++---
+ src/app/components/result.ts      | 17 ++++++++++-------
+ src/app/data/constants.ts         |  2 +-
+ 3 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/src/app/components/measurement.ts b/src/app/components/measurement.ts
+index 99c2766..5aac0e7 100644
+--- a/src/app/components/measurement.ts
++++ b/src/app/components/measurement.ts
+@@ -42,10 +42,12 @@ export const measurements = {
+         return await axios.get(apiUrls.definedRangeReading(uuid), {
+             params: { from, to }
+         })
+-            .then((response) =>
++            .then((response) => {
++                // Sort data by readingTime in ascending order
++                response.data = response.data.sort((a: any, b: any) => a.readingTime - b.readingTime);
+                 // Resolve the promise with the list of electricity readings
+-                Promise.resolve(response.data)
+-            )
++                return Promise.resolve(response.data)
++            })
+             .catch((error) => {
+                 // Throw an error with details if the request fails
+                 throw new Error(`${error.code} Fetching readings for ${new Date(timeRange.startTime)} - ${new Date(timeRange.endTime)} failed: ${error.response?.data?.message || error.message}`);
+diff --git a/src/app/components/result.ts b/src/app/components/result.ts
+index 2fe3624..e60cfe2 100644
+--- a/src/app/components/result.ts
++++ b/src/app/components/result.ts
+@@ -16,15 +16,18 @@ export const getResult = (readings: ElectricityReading[]) => {
+     let maxConsumption = 0;
+ 
+     // Iterate through each reading in the readings array
+-    readings.forEach(reading => {
+-        // Add the energy output of the current reading to the overall consumption
+-        overallConsumption += reading.energyOut;
++    for (let i = 1; i < readings.length; i++) {
++        // Calculate the power consumed between consecutive readings
++        const powerConsumed = readings[i].energyOut - readings[i - 1].energyOut;
+ 
+-        // Update the maximum consumption if the current reading's energy output is greater than the current max
+-        if (reading.energyOut > maxConsumption) {
+-            maxConsumption = reading.energyOut;
++        // Check if the current power consumed is greater than the previous maximum consumption
++        if (powerConsumed > maxConsumption) {
++            maxConsumption = powerConsumed; // Update the maximum consumption if the current reading exceeds it
+         }
+-    });
++
++        // Accumulate the power consumed for overall consumption calculation
++        overallConsumption += powerConsumed;
++    }
+ 
+     // Log the overall electricity consumption for the month of July 2023 in kWh
+     console.log('The overall electricity consumption for the month of July 2023 is', unitConversion.convertmWhTokWh(overallConsumption));
+diff --git a/src/app/data/constants.ts b/src/app/data/constants.ts
+index 144252e..07853ca 100644
+--- a/src/app/data/constants.ts
++++ b/src/app/data/constants.ts
+@@ -9,7 +9,7 @@ export const timeRange = {
+     /** The start time for fetching electricity readings. */
+     'startTime': 1688228100000,
+     /** The end time for fetching electricity readings. */
+-    'endTime': 1690820100000
++    'endTime': 1690840799000
+ };
+ 
+ /**
+-- 
+2.20.1 (Apple Git-117)
+
